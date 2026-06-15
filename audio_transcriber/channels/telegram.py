@@ -1,4 +1,4 @@
-"""Telegram channel: receives voice/audio messages and replies with transcripts."""
+"""Telegram channel: receives audio messages and replies with transcripts."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 class TelegramChannel(Channel):
-    """A long-polling Telegram bot backed by the shared :class:`Transcriber`."""
+    """A long-polling Telegram bot backed by the shared :class:`Transcriber`."""  # noqa: E501
 
     def _build_application(self) -> Application:
         app = (
@@ -36,7 +36,7 @@ class TelegramChannel(Channel):
         )
         return app
 
-    async def _on_start(
+    async def _on_start(  # noqa: PLR6301
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
         if update.message:

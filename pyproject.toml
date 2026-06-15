@@ -11,10 +11,22 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["ipywidgets>=8.1.8", "notebook>=7.5.7", "ruff>=0.15.17"]
+dev = [
+    "ipywidgets>=8.1.8",
+    "notebook>=7.5.7",
+    "pytest>=9.1.0",
+    "pytest-asyncio>=1.4.0",
+    "ruff>=0.15.17",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = 'auto'
+testpaths = ['tests']
+pythonpath = ['.']
+addopts = '--import-mode=importlib'
 
 [tool.ruff]
-line-length = 79
+line-length = 80
 
 [tool.ruff.lint]
 preview = true
