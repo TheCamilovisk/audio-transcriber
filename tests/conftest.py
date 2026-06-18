@@ -33,7 +33,9 @@ def _reset_singletons():
 @pytest.fixture
 def settings() -> Settings:
     """A valid Settings instance isolated from the real .env / host env."""
-    return Settings(telegram_bot_token='test-token', _env_file=None)
+    return Settings(
+        telegram_bot_token='test-token', device='cpu', _env_file=None
+    )
 
 
 # --- Transcriber (faster-whisper) fakes -------------------------------------
