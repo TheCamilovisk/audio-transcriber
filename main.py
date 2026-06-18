@@ -2,9 +2,8 @@
 
 import logging
 
-from audio_transcriber.channels.telegram import TelegramChannel
+from audio_transcriber.channels.manager import ChannelManager
 from audio_transcriber.config import Settings
-from audio_transcriber.transcriber import Transcriber
 
 
 def main() -> None:
@@ -14,9 +13,8 @@ def main() -> None:
     )
 
     settings = Settings()  # type: ignore
-    transcriber = Transcriber(settings)
-    channel = TelegramChannel(transcriber, settings)
-    channel.run()
+    manager = ChannelManager(settings)
+    manager.run()
 
 
 if __name__ == '__main__':

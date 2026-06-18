@@ -12,6 +12,7 @@ from audio_transcriber.config import Settings
 def _settings(**overrides) -> Settings:
     """Build Settings isolated from the real .env / host env."""
     overrides.setdefault('telegram_bot_token', 'test-token')
+    overrides.setdefault('device', 'cpu')
     return Settings(_env_file=None, **overrides)  # type: ignore
 
 
