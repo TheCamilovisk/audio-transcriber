@@ -26,9 +26,7 @@ class TelegramChannel(Channel):
 
     def _build_application(self) -> Application:
         app = (
-            ApplicationBuilder()
-            .token(self.settings.telegram_bot_token)
-            .build()
+            ApplicationBuilder().token(self.settings.telegram_bot_token).build()
         )
         app.add_handler(CommandHandler('start', self._on_start))
         app.add_handler(
