@@ -9,13 +9,14 @@ from faster_whisper import BatchedInferencePipeline, WhisperModel
 from numpy import ndarray
 
 from .config import Settings
+from .singleton import Singleton
 
 logger = logging.getLogger(__name__)
 
 AudioInput = str | BinaryIO | ndarray
 
 
-class Transcriber:
+class Transcriber(metaclass=Singleton):
     """Loads a Whisper model once and turns audio into a transcript string."""
 
     def __init__(self, settings: Settings) -> None:
