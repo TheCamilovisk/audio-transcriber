@@ -13,7 +13,21 @@ import pytest
 
 import audio_transcriber.transcriber as transcriber_mod
 from audio_transcriber.config import Settings
+from audio_transcriber.singleton import Singleton
 from audio_transcriber.transcriber import Transcriber
+
+
+@pytest.fixture(autouse=True)
+def _reset_singletons():
+    """Clear singleton cache before and after every test.
+
+    Keeps :class:`Transcriber` (and any future singleton) isolated between
+    tests so existing monkeypatched fixtures like ``make_transcriber`` still
+    return fresh instances.
+    """
+    Singleton._instances.clear()
+    yield
+    Singleton._instances.clear()
 
 
 @pytest.fixture
