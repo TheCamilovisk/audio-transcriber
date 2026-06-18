@@ -9,12 +9,19 @@ A **Telegram bot that transcribes voice/audio messages** using
 text. A user sends a voice note → the bot transcribes it → it edits its "Transcribing…"
 reply into the transcript.
 
-The design separates three concerns so new input/output surfaces are additive:
+The design separates four concerns so new input/output surfaces are additive:
 - **`Transcriber`** (core) — wraps the Whisper model; knows nothing about Telegram.
 - **`Channel`** (adapter) — captures incoming audio *and* relays the transcript
   back on the same surface. `Channel` is an ABC; adding Slack/Discord/etc. later
   is a new subclass file, not a refactor.
+- **`ChannelManager`** (registry/ownership) — singleton that owns the shared
+  `Transcriber` instance and the list of registered channel classes. Adding a
+  future channel means appending its class to `ChannelManager.channel_classes`.
 - **`Settings`** (config) — typed configuration from env / `.env`.
+
+Both `Transcriber` and `ChannelManager` are singletons (via the `Singleton`
+metaclass), ensuring the Whisper model is loaded once and the channel registry
+is shared across the process.
 
 ## Architecture
 
@@ -23,17 +30,23 @@ Data flow: Telegram voice/audio → download in-memory (`io.BytesIO`, no temp fi
 
 - [audio_transcriber/config.py](audio_transcriber/config.py) — `Settings`
   (pydantic-settings). Resolves `DEVICE=auto` to cuda/cpu and derives `compute_type`.
+- [audio_transcriber/singleton.py](audio_transcriber/singleton.py) — `Singleton`
+  metaclass shared by `Transcriber` and `ChannelManager`.
 - [audio_transcriber/transcriber.py](audio_transcriber/transcriber.py) —
-  `Transcriber` builds `WhisperModel` + `BatchedInferencePipeline` once; `transcribe`
-  accepts a path, a seekable file-like object, or an ndarray and returns the joined
-  transcript. Blocking/CPU-bound — always call it off the async loop.
+  `Transcriber` (singleton) builds `WhisperModel` + `BatchedInferencePipeline` once;
+  `transcribe` accepts a path, a seekable file-like object, or an ndarray and
+  returns the joined transcript. Blocking/CPU-bound — always call it off the async
+  loop.
 - [audio_transcriber/channels/base.py](audio_transcriber/channels/base.py) —
   `Channel` ABC (the extension seam): `run()` blocks while listening + relaying.
 - [audio_transcriber/channels/telegram.py](audio_transcriber/channels/telegram.py) —
   `TelegramChannel`: long-polling bot (python-telegram-bot, async) handling
   `filters.VOICE | filters.AUDIO`.
-- [main.py](main.py) — entrypoint: loads `Settings`, builds `Transcriber`, hands it
-  to `TelegramChannel`, calls `.run()`.
+- [audio_transcriber/channels/manager.py](audio_transcriber/channels/manager.py) —
+  `ChannelManager` (singleton) registers channel classes, builds the shared
+  `Transcriber` once, and fans out `run()` to each channel.
+- [main.py](main.py) — entrypoint: loads `Settings`, builds `ChannelManager`,
+  calls `.run()`.
 
 ## Environment & commands
 
