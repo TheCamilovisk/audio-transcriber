@@ -18,26 +18,21 @@ class Settings(BaseSettings):
         ..., description='Bot token from @BotFather.'
     )
 
-    whisper_model: str = 'turbo'
-    device: str = 'cpu'  # "cpu" | "cuda" | "auto"
-    compute_type: str | None = None  # derived from device when unset
-    batch_size: int = 16
-
-    @property
-    def resolved_device(self) -> str:
-        """Concrete device to load the model on, resolving ``"auto"``."""
-        if self.device != 'auto':
-            return self.device
-        try:
-            from ctranslate2 import get_cuda_device_count  # noqa: PLC0415
-
-            return 'cuda' if get_cuda_device_count() > 0 else 'cpu'
-        except Exception:
-            return 'cpu'
-
-    @property
-    def resolved_compute_type(self) -> str:
-        """Compute type for the model, derived from the device when unset."""
-        if self.compute_type:
-            return self.compute_type
-        return 'float16' if self.resolved_device == 'cuda' else 'int8'
+    transcription_api_base_url: str = Field(
+        default='http://localhost:8000',
+        description='Base URL of the remote transcription REST API.',
+    )
+    transcription_request_timeout: float = Field(
+        default=30.0,
+        description='Per-HTTP-call timeout (seconds) for POST/GET requests.',
+    )
+    transcription_poll_interval: float = Field(
+        default=2.0,
+        description='Seconds to sleep between job-status polls.',
+    )
+    transcription_poll_timeout: float = Field(
+        default=300.0,
+        description=(
+            'Max total seconds to wait for a job to reach a terminal status.'
+        ),
+    )

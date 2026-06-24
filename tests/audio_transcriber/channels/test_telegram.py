@@ -123,15 +123,54 @@ async def test_transcription_runs_off_event_loop(
 ):
     calls = []
 
-    async def fake_to_thread(func, *args):
-        calls.append((func, args))
-        return func(*args)
+    async def fake_to_thread(func, *args, **kwargs):
+        calls.append((func, args, kwargs))
+        return func(*args, **kwargs)
 
     monkeypatch.setattr(telegram_mod.asyncio, 'to_thread', fake_to_thread)
     update = make_update(voice=True)
     await channel._on_audio(update, context)
 
     assert len(calls) == 1
-    func, args = calls[0]
+    func, args, kwargs = calls[0]
     assert func is fake_transcriber.transcribe
     assert args[0].getvalue() == b'audio-bytes'
+    assert kwargs == {'filename': 'voice.ogg', 'content_type': 'audio/ogg'}
+
+
+# UC17 — voice messages use the default Ogg filename/content-type
+async def test_voice_uses_default_filename_and_content_type(
+    channel, context, make_update, fake_transcriber
+):
+    update = make_update(voice=True)
+    await channel._on_audio(update, context)
+    assert fake_transcriber.transcribe.call_args.kwargs == {
+        'filename': 'voice.ogg',
+        'content_type': 'audio/ogg',
+    }
+
+
+# UC17 — audio messages forward their own file_name/mime_type
+async def test_audio_uses_file_name_and_mime_type_from_message(
+    channel, context, make_update, fake_transcriber
+):
+    update = make_update(
+        audio=True, file_name='song.mp3', mime_type='audio/mpeg'
+    )
+    await channel._on_audio(update, context)
+    assert fake_transcriber.transcribe.call_args.kwargs == {
+        'filename': 'song.mp3',
+        'content_type': 'audio/mpeg',
+    }
+
+
+# UC17 — audio messages without metadata fall back to the same defaults
+async def test_audio_falls_back_to_defaults_when_metadata_missing(
+    channel, context, make_update, fake_transcriber
+):
+    update = make_update(audio=True)
+    await channel._on_audio(update, context)
+    assert fake_transcriber.transcribe.call_args.kwargs == {
+        'filename': 'voice.ogg',
+        'content_type': 'audio/ogg',
+    }

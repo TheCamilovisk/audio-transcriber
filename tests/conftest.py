@@ -1,17 +1,17 @@
 """Centralized fixtures for the test suite.
 
-Everything heavy (the Whisper model, the Telegram network surface) is faked
-here so tests run offline, deterministically, and in milliseconds.
+Everything heavy (the remote transcription API, the Telegram network
+surface) is faked here so tests run offline, deterministically, and in
+milliseconds.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+import respx
 
-import audio_transcriber.transcriber as transcriber_mod
 from audio_transcriber.config import Settings
 from audio_transcriber.singleton import Singleton
 from audio_transcriber.transcriber import Transcriber
@@ -22,8 +22,7 @@ def _reset_singletons():
     """Clear singleton cache before and after every test.
 
     Keeps :class:`Transcriber` (and any future singleton) isolated between
-    tests so existing monkeypatched fixtures like ``make_transcriber`` still
-    return fresh instances.
+    tests so each test gets a fresh instance.
     """
     Singleton._instances.clear()
     yield
@@ -34,86 +33,36 @@ def _reset_singletons():
 def settings() -> Settings:
     """A valid Settings instance isolated from the real .env / host env."""
     return Settings(
-        telegram_bot_token='test-token', device='cpu', _env_file=None
+        telegram_bot_token='test-token',
+        transcription_poll_interval=0,
+        _env_file=None,
     )
 
 
-# --- Transcriber (faster-whisper) fakes -------------------------------------
-
-
-@dataclass
-class _Segment:
-    """Stand-in for a faster-whisper segment (only ``.text`` is read)."""
-
-    text: str
-
-
-@dataclass
-class _Info:
-    """Stand-in for the detection info returned alongside segments."""
-
-    language: str = 'en'
-    language_probability: float = 0.99
-
-
-class _RecordingModel:
-    """Captures how :class:`Transcriber` builds the Whisper model."""
-
-    def __init__(
-        self, model_size: str, *, device: str, compute_type: str
-    ) -> None:
-        self.model_size = model_size
-        self.device = device
-        self.compute_type = compute_type
-
-
-class _FakePipeline:
-    """Returns canned segments and records the ``transcribe`` call."""
-
-    def __init__(self, segments: list[_Segment], info: _Info) -> None:
-        self._segments = segments
-        self._info = info
-        self.model: _RecordingModel | None = None
-        self.last_audio: object = None
-        self.last_batch_size: int | None = None
-
-    def transcribe(self, audio, batch_size):  # noqa: ANN001
-        self.last_audio = audio
-        self.last_batch_size = batch_size
-        return self._segments, self._info
+# --- Transcriber (remote transcription API) fakes ---------------------------
 
 
 @pytest.fixture
-def make_transcriber(settings: Settings, monkeypatch):
-    """Factory building a :class:`Transcriber` with a faked pipeline.
+def transcription_api(settings: Settings):
+    """A respx mock router scoped to the configured API base URL.
 
-    Pass the segment texts each test wants back; the resulting transcriber's
-    ``_pipeline`` (a :class:`_FakePipeline`) and ``_pipeline.model`` are
-    reachable for call assertions.
+    Tests register ``transcription_api.post(...)``/``.get(...)`` routes and
+    can inspect ``transcription_api.calls`` afterwards.
     """
+    with respx.mock(
+        base_url=settings.transcription_api_base_url, assert_all_called=False
+    ) as router:
+        yield router
 
-    def _make(
-        *,
-        texts: tuple[str, ...] = (),
-        language: str = 'en',
-        language_probability: float = 0.99,
-    ) -> Transcriber:
-        pipeline = _FakePipeline(
-            [_Segment(text) for text in texts],
-            _Info(language, language_probability),
-        )
 
-        def _build_pipeline(*, model):  # noqa: ANN001
-            pipeline.model = model
-            return pipeline
+@pytest.fixture
+def make_transcriber(settings: Settings) -> Transcriber:
+    """Build a :class:`Transcriber` wired to ``settings``.
 
-        monkeypatch.setattr(transcriber_mod, 'WhisperModel', _RecordingModel)
-        monkeypatch.setattr(
-            transcriber_mod, 'BatchedInferencePipeline', _build_pipeline
-        )
-        return Transcriber(settings)
-
-    return _make
+    Construction does no I/O — tests script the HTTP behavior via the
+    ``transcription_api`` respx router.
+    """
+    return Transcriber(settings)
 
 
 # --- Telegram fakes ---------------------------------------------------------
@@ -127,9 +76,17 @@ def fake_transcriber() -> MagicMock:
     return transcriber
 
 
-def _build_media(*, download: bytes, get_file_error: Exception | None):
+def _build_media(
+    *,
+    download: bytes,
+    get_file_error: Exception | None,
+    file_name: str | None = None,
+    mime_type: str | None = None,
+):
     """A fake Telegram media object (voice/audio) with an async download."""
     media = MagicMock()
+    media.file_name = file_name
+    media.mime_type = mime_type
     if get_file_error is not None:
         media.get_file = AsyncMock(side_effect=get_file_error)
         return media
@@ -147,13 +104,15 @@ def make_update():
     and its ``edit_text`` is an ``AsyncMock``.
     """
 
-    def _make(
+    def _make(  # noqa: PLR0913
         *,
         has_message: bool = True,
         voice: bool = False,
         audio: bool = False,
         download: bytes = b'audio-bytes',
         get_file_error: Exception | None = None,
+        file_name: str | None = None,
+        mime_type: str | None = None,
     ) -> MagicMock:
         update = MagicMock()
         if not has_message:
@@ -165,12 +124,22 @@ def make_update():
         ack.edit_text = AsyncMock()
         message.reply_text = AsyncMock(return_value=ack)
         message.voice = (
-            _build_media(download=download, get_file_error=get_file_error)
+            _build_media(
+                download=download,
+                get_file_error=get_file_error,
+                file_name=file_name,
+                mime_type=mime_type,
+            )
             if voice
             else None
         )
         message.audio = (
-            _build_media(download=download, get_file_error=get_file_error)
+            _build_media(
+                download=download,
+                get_file_error=get_file_error,
+                file_name=file_name,
+                mime_type=mime_type,
+            )
             if audio
             else None
         )
