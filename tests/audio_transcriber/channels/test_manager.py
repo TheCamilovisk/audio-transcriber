@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
-import audio_transcriber.transcriber as transcriber_mod
 from audio_transcriber.channels.base import Channel
 from audio_transcriber.channels.manager import ChannelManager
 from audio_transcriber.transcriber import Transcriber
@@ -19,32 +16,6 @@ class _RecordingChannel(Channel):
 
     def run(self) -> None:
         self.run_count += 1
-
-
-@pytest.fixture(autouse=True)
-def _fake_whisper(monkeypatch):  # noqa: ANN001
-    """Fake WhisperModel and BatchedInferencePipeline so Transcriber builds
-    without CUDA/cuDNN.
-    """
-
-    class _FakeModel:
-        def __init__(self, model_size, *, device, compute_type):  # noqa: ANN001, ANN002, ANN003
-            self.model_size = model_size
-            self.device = device
-            self.compute_type = compute_type
-
-    class _FakePipeline:
-        def __init__(self, *, model):  # noqa: ANN001, ANN002
-            self.model = model
-
-        @staticmethod
-        def transcribe(audio, batch_size):  # noqa: ANN001, ANN002
-            return [], None
-
-    monkeypatch.setattr(transcriber_mod, 'WhisperModel', _FakeModel)
-    monkeypatch.setattr(
-        transcriber_mod, 'BatchedInferencePipeline', _FakePipeline
-    )
 
 
 # UC — singleton: ChannelManager(settings) is ChannelManager(settings)
